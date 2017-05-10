@@ -3,6 +3,7 @@ from data import Articles
 from flask_mysqldb import MySQL
 from wtforms import Form,StringField, TextAreaField, PasswordField, validators
 from passlib.hash import sha256_crypt
+from functools import wraps
 
 
 app = Flask(__name__)
@@ -88,9 +89,7 @@ def login():
     if request.method == 'POST':
         #Get Form Fields
         username = request.form['username']
-        password_candidate = request.form['password'] 
-
-
+        password_candidate = request.form['password']
         #create cursor
         cur = mysql.connection.cursor()
 
@@ -102,10 +101,58 @@ def login():
 
             #compare the password
             if sha256_crypt.verify(password_candidate, password):
-                app.logger.info('PASSWORD MATCHED')
+                #app.logger.info('PASSWORD MATCHED')
+                #passed
+                session['logged_in'] = True
+                session['username'] = username
+
+
+                flash('you are now logged in', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                error = 'Invalid Login'
+                return render_template('login.html', error=error)
+            #close connection
+            cur.close()
         else:
-            app.logger.info('NO USER')
-    return render_template('register.html')
+            error = 'Username not found'
+            return render_template('login.html', error=error)
+    return render_template('login.html')
+
+
+
+
+
+def is_logged_in(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'logged_in' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized, Please login', 'danger')
+            return redirect(url_for('login'))
+    return wrap
+    
+#logout
+@app.route('/logout')
+
+def logout():
+    session.clear()
+    flash('You are now logged out', 'success')
+    return  render_template('login.html')
+
+#dashboard
+@app.route('/dashboard')
+@is_logged_in
+
+def dashboard():
+    return render_template('dashboard.html')
+
+
+
+
+
+
 
 if __name__ == '__main__':
     app.secret_key = 'secret123#'
